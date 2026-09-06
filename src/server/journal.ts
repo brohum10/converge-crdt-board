@@ -1,12 +1,13 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BoardOperation, SequencedOperation } from "../core/types.js";
+import type { OperationStore } from "./store.js";
 
 interface PersistedEntry extends SequencedOperation {
   boardId: string;
 }
 
-export class OperationJournal {
+export class OperationJournal implements OperationStore {
   private readonly boards = new Map<string, SequencedOperation[]>();
   private readonly seen = new Set<string>();
   private cursor = 0;
@@ -57,11 +58,11 @@ export class OperationJournal {
     return accepted;
   }
 
-  since(boardId: string, cursor: number): SequencedOperation[] {
+  async since(boardId: string, cursor: number): Promise<SequencedOperation[]> {
     return (this.boards.get(boardId) ?? []).filter((entry) => entry.cursor > cursor);
   }
 
-  latestCursor(boardId: string): number {
+  async latestCursor(boardId: string): Promise<number> {
     return this.boards.get(boardId)?.at(-1)?.cursor ?? 0;
   }
 

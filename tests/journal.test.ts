@@ -28,14 +28,14 @@ describe("operation journal", () => {
   it("returns only entries newer than a reconnect cursor", async () => {
     const journal = new OperationJournal();
     const entries = await journal.append("board", [op, { ...op, id: "a:2", sequence: 2 }]);
-    expect(journal.since("board", entries[0].cursor)).toEqual([entries[1]]);
+    expect(await journal.since("board", entries[0].cursor)).toEqual([entries[1]]);
   });
 
   it("isolates operation streams by board", async () => {
     const journal = new OperationJournal();
     await journal.append("alpha", [op]);
     await journal.append("beta", [op]);
-    expect(journal.since("alpha", 0)).toHaveLength(1);
-    expect(journal.since("beta", 0)).toHaveLength(1);
+    expect(await journal.since("alpha", 0)).toHaveLength(1);
+    expect(await journal.since("beta", 0)).toHaveLength(1);
   });
 });

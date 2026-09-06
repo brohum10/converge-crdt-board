@@ -30,7 +30,9 @@ The client keeps three pieces of sync metadata:
 - operations that have not yet been echoed by the server;
 - the largest server cursor it has received.
 
-On reconnect, it asks for entries after its cursor and resends its pending operations. Resending is safe because both the journal and replica deduplicate by operation ID. The server gives each newly accepted operation a global cursor, stores it in an append-only journal, and broadcasts it to every socket subscribed to that board.
+On reconnect, it asks for entries after its cursor and resends its pending operations. Resending is safe because both the journal and replica deduplicate by operation ID. The server gives each newly accepted operation a global cursor, stores it through the selected journal adapter, and broadcasts it to every socket subscribed to that board.
+
+The PostgreSQL adapter wraps each batch in a transaction, uses a unique constraint on `(board_id, operation_id)` for cross-process idempotency, and indexes `(board_id, cursor)` for reconnect replay. The NDJSON adapter preserves the exact same interface for a zero-dependency local path.
 
 The server cursor is a transport optimization, not part of conflict resolution. CRDT timestamps still decide values, which prevents arrival order from silently changing the result.
 
@@ -41,9 +43,10 @@ The server cursor is a transport optimization, not part of conflict resolution. 
 | Duplicate check | O(1) average | O(number of operation IDs) |
 | Apply one patch | O(number of fields), bounded by 4 | O(number of cards + operations) |
 | Materialize board | O(cards log cards) | O(cards) output |
-| Replay after cursor | O(board history) in this demo | O(missed operations) output |
+| Replay after cursor, NDJSON | O(board history) | O(missed operations) output |
+| Replay after cursor, PostgreSQL | O(log history + missed operations) | O(missed operations) output |
 
-For a production-scale board, the journal would index `(board_id, cursor)` in a database, and the server would periodically compact acknowledged history into signed snapshots.
+For long-lived production boards, the server would periodically compact acknowledged history into signed snapshots. The existing store abstraction leaves that policy independent of CRDT merge logic.
 
 ## Failure behavior
 
@@ -55,17 +58,32 @@ For a production-scale board, the journal would index `(board_id, cursor)` in a 
 | Browser clock moves backward | Logical time advances on the previous wall-time value |
 | Server restarts | Accepted operations reload from the NDJSON journal |
 | Invalid/oversized message | The protocol rejects it before journal mutation |
+| Client floods operations | Per-socket token buckets reject excess work |
+| Client cannot drain messages | Backpressure limit closes the socket with a retryable status |
+| PostgreSQL write fails | The batch transaction rolls back and no partial acknowledgement is sent |
 
-The current file journal is durable enough for a local demonstration but does not promise crash-atomic multi-record writes. A transactional database would be the next operational step.
+The file journal is durable enough for local development but does not promise crash-atomic multi-record writes. The PostgreSQL adapter is the production-shaped path when transactional batch durability matters.
+
+## Observability
+
+`GET /metrics` exposes Prometheus text format with active connections, accepted operations, duplicate retries, rejected messages, replay volume, and a persistence-latency histogram. The Compose stack includes a Prometheus scraper, making it possible to answer operational questions without adding instrumentation after an incident.
+
+## Verification strategy
+
+The suite covers three different failure surfaces:
+
+1. focused tests for clocks, registers, validation, journals, rate limiting, and metrics;
+2. a multi-client WebSocket integration test that verifies broadcast, cursor replay, and emitted telemetry;
+3. 200 generated concurrent histories applied forward, backward, and rotated to check the convergence invariant across thousands of operation schedules.
 
 ## Production evolution
 
 I would preserve the core operation contract while replacing infrastructure around it:
 
 1. Authenticate WebSocket upgrades with short-lived session tokens and authorize each `boardId`.
-2. Persist operations in PostgreSQL with unique constraints on operation ID and an index on `(board_id, cursor)`.
-3. Publish accepted rows through a transactional outbox to a fan-out layer such as Redis Streams or NATS.
-4. Compact older logs into versioned snapshots after all active replica cursors pass a watermark.
-5. Add per-board quotas, structured telemetry, reconnect latency SLOs, and property-based fuzz tests.
+2. Publish accepted PostgreSQL rows through a transactional outbox to a fan-out layer such as Redis Streams or NATS for multi-instance delivery.
+3. Compact older logs into versioned snapshots after all active replica cursors pass a watermark.
+4. Add per-board storage quotas and reconnect latency SLOs around the existing metrics.
+5. Fuzz the wire protocol and run fault-injection tests against containerized PostgreSQL.
 
 For text documents, I would replace the title register with a sequence CRDT so simultaneous character edits preserve both users' intent. For a task title, last-writer-wins is simpler and has a predictable user experience.

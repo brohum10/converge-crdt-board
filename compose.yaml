@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: converge
+      POSTGRES_USER: converge
+      POSTGRES_PASSWORD: converge
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U converge -d converge"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - converge-data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    environment:
+      PORT: 8787
+      DATABASE_URL: postgresql://converge:converge@postgres:5432/converge
+      STATIC_DIR: ./dist
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8787:8787"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8787/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "9090:9090"
+
+volumes:
+  converge-data:

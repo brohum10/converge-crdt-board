@@ -13,17 +13,20 @@ Most collaborative demos assume a perfect connection and let the server decide e
 - **Local-first React client** — applies edits before the network responds and persists an offline operation queue
 - **Deterministic CRDT core** — field-level last-writer-wins registers backed by hybrid logical clocks and actor-ID tie-breaking
 - **WebSocket sync service** — replays missed operations from a cursor and broadcasts accepted updates in real time
-- **Append-only journal** — persists accepted operations as newline-delimited JSON and deduplicates retries
-- **Defensive protocol boundary** — caps payloads and batches, validates operation shape, and isolates board streams
-- **Correctness suite** — verifies convergence, idempotency, clock skew, tombstones, reconnect cursors, and hostile input
+- **Dual storage adapters** — runs instantly with an NDJSON journal or transactionally with PostgreSQL and indexed cursor replay
+- **Operational safeguards** — enforces token-bucket rate limits, bounded socket backpressure, payload caps, and strict validation
+- **Prometheus telemetry** — exposes connection gauges, accepted/duplicate/replayed counters, rejections, and persistence latency
+- **Correctness suite** — combines deterministic cases, a real multi-socket integration test, and 200-run property-based convergence fuzzing
 
 ## Architecture
 
 ```text
 ┌──────────────────┐  queued operations   ┌────────────────────┐
-│ React replica A  │ ───── WebSocket ───▶ │ Sync + operation   │
-│ localStorage log │ ◀──── cursor replay ─ │ journal            │
-└──────────────────┘                       └─────────┬──────────┘
+│ React replica A  │ ───── WebSocket ───▶ │ Rate-limited sync  │
+│ localStorage log │ ◀──── cursor replay ─ │ service            │
+└──────────────────┘                       └─────┬────────┬─────┘
+                                               │        │
+                                      PostgreSQL/NDJSON │ Prometheus
                                                    │ broadcast
 ┌──────────────────┐                               │
 │ React replica B  │ ◀─────────────────────────────┘
@@ -33,7 +36,7 @@ Most collaborative demos assume a perfect connection and let the server decide e
 Each replica: operation log → HLC ordering → field-level LWW registers → board view
 ```
 
-The server orders delivery with a monotonically increasing cursor, but it does **not** decide application state. Every client independently folds the same immutable operations into its CRDT. This separation lets the transport retry freely: operation IDs make delivery idempotent, and CRDT ordering makes delivery order irrelevant.
+The server orders delivery with a monotonically increasing cursor, but it does **not** decide application state. Every client independently folds the same immutable operations into its CRDT. This separation lets the transport retry freely: operation IDs make delivery idempotent, a PostgreSQL uniqueness constraint protects that invariant across processes, and CRDT ordering makes delivery order irrelevant.
 
 See [docs/architecture.md](docs/architecture.md) for invariants, failure behavior, tradeoffs, and production extensions.
 
@@ -59,6 +62,21 @@ npm run dev
 
 Visit `http://localhost:5173`. The sync server exposes `GET /health` at `http://localhost:8787/health`.
 
+### Run the production-shaped stack
+
+With Docker installed, one command builds the client and server, starts PostgreSQL-backed persistence, and configures Prometheus scraping:
+
+```bash
+docker compose up --build
+```
+
+- Application: `http://localhost:8787`
+- Health: `http://localhost:8787/health`
+- Prometheus metrics: `http://localhost:8787/metrics`
+- Prometheus UI: `http://localhost:9090`
+
+If `DATABASE_URL` is absent, the same server automatically falls back to the local NDJSON journal for a zero-setup development path.
+
 ## Verify it
 
 ```bash
@@ -82,11 +100,11 @@ This is deliberate last-writer-wins behavior, not intent-preserving rich-text me
 
 ## Technology
 
-TypeScript · React · Vite · Node.js · WebSockets · Vitest · Hybrid logical clocks · CRDTs
+TypeScript · React · Vite · Node.js · WebSockets · PostgreSQL · Prometheus · Docker Compose · Vitest · fast-check · Hybrid logical clocks · CRDTs
 
 ## Status and scope
 
-Converge is an engineering demonstration, not a hosted multi-tenant product. It intentionally keeps authentication, authorization, snapshot compaction, and database replication outside the current scope; [docs/architecture.md](docs/architecture.md) explains how I would add each without weakening the consistency model.
+Converge is an engineering demonstration, not a hosted multi-tenant product. It intentionally keeps authentication, authorization, snapshot compaction, and multi-region database replication outside the current scope; [docs/architecture.md](docs/architecture.md) explains how I would add each without weakening the consistency model.
 
 ## License
 
