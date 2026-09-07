@@ -2,7 +2,7 @@
 
 ## Consistency model
 
-Converge models each card as four independent last-writer-wins registers: `title`, `column`, `rank`, and `deleted`. An operation can update one or more registers. A register accepts an incoming value when its timestamp is greater than or equal to the current timestamp.
+Converge models each card as four independent last-writer-wins registers: `title`, `column`, `rank`, and `deleted`. An operation can update one or more registers. A register accepts an incoming value when its `(timestamp, operation ID)` tuple is greater than the current tuple.
 
 The timestamp is a hybrid logical clock tuple:
 
@@ -10,7 +10,7 @@ The timestamp is a hybrid logical clock tuple:
 (wall time, logical counter, actor ID)
 ```
 
-Wall time keeps ordering intuitive. The logical counter preserves causality when the local clock stalls or moves backward. Actor ID breaks the final tie deterministically. The result is a total order without requiring synchronized physical clocks.
+Wall time keeps ordering intuitive. The logical counter preserves causality when the local clock stalls or moves backward. Actor ID orders concurrent clocks, and the immutable operation ID resolves even a duplicated actor timestamp. The result is a total order without requiring synchronized physical clocks or trusting every client to maintain its clock perfectly.
 
 ## Invariants
 

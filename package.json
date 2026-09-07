@@ -15,29 +15,29 @@
     "start": "node dist-server/server/index.js"
   },
   "dependencies": {
-    "pg": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "ws": "latest"
+    "pg": "^8.23.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "latest",
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@types/pg": "latest",
-    "@types/ws": "latest",
-    "@vitest/coverage-v8": "latest",
-    "fast-check": "latest",
-    "jsdom": "latest",
-    "tsx": "latest",
-    "typescript": "latest",
-    "vite": "latest",
-    "vitest": "latest"
+    "@vitejs/plugin-react": "^6.1.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^5.0.0",
+    "fast-check": "^4.9.0",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   }
 }

@@ -66,6 +66,16 @@ describe("board replica", () => {
     expect(new BoardReplica("reader", [zoe, alice]).visibleCards()[0].title).toBe("Zoe");
   });
 
+  it("breaks duplicate actor timestamp ties by operation id", () => {
+    const first = operation({ id: "alice:1", sequence: 1, patch: { column: "backlog" } });
+    const second = operation({ id: "alice:2", sequence: 2, patch: { column: "progress" } });
+    const forward = new BoardReplica("forward", [first, second]);
+    const reverse = new BoardReplica("reverse", [second, first]);
+
+    expect(reverse.visibleCards()).toEqual(forward.visibleCards());
+    expect(forward.visibleCards()[0].column).toBe("progress");
+  });
+
   it("uses a tombstone instead of physically deleting state", () => {
     const replica = new BoardReplica("alice", [operation()]);
     const deletion = replica.change("card-1", { deleted: true }, 200);

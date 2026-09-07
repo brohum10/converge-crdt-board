@@ -29,6 +29,7 @@ export interface BoardOperation {
 export interface LwwRegister<T> {
   value: T;
   timestamp: HybridTimestamp;
+  operationId: string;
 }
 
 export interface MaterializedCard extends CardValue {

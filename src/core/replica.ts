@@ -20,7 +20,15 @@ const DEFAULT_CARD: CardValue = {
 };
 
 function register<T>(value: T): LwwRegister<T> {
-  return { value, timestamp: ZERO_TIMESTAMP };
+  return { value, timestamp: ZERO_TIMESTAMP, operationId: "" };
+}
+
+function shouldReplace(
+  current: Pick<LwwRegister<unknown>, "timestamp" | "operationId">,
+  operation: BoardOperation,
+): boolean {
+  const timestampOrder = compareTimestamps(operation.timestamp, current.timestamp);
+  return timestampOrder > 0 || (timestampOrder === 0 && operation.id > current.operationId);
 }
 
 function blankCard(): CardRegisters {
@@ -81,10 +89,11 @@ export class BoardReplica {
       const value = operation.patch[key];
       if (value === undefined) continue;
       const current = card[key];
-      if (compareTimestamps(operation.timestamp, current.timestamp) >= 0) {
+      if (shouldReplace(current, operation)) {
         // The assignment is safe because key and value originate from the same CardPatch field.
         (card[key] as LwwRegister<typeof value>).value = value;
         card[key].timestamp = operation.timestamp;
+        card[key].operationId = operation.id;
       }
     }
 

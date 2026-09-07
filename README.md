@@ -1,5 +1,10 @@
 # Converge
 
+[![CI](https://github.com/brohum10/converge-crdt-board/actions/workflows/ci.yml/badge.svg)](https://github.com/brohum10/converge-crdt-board/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/brohum10/converge-crdt-board/actions/workflows/codeql.yml/badge.svg)](https://github.com/brohum10/converge-crdt-board/actions/workflows/codeql.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Converge is a local-first collaborative board that stays usable through slow networks, dropped connections, and concurrent edits. Changes are written to the browser immediately, queued while offline, and synchronized over WebSockets when connectivity returns. A field-level CRDT makes every replica resolve conflicts to the same state without a central lock.
 
 > Open the app in two tabs, take one offline, edit the same card in both, then reconnect. Both tabs converge while preserving unrelated field changes.
@@ -11,7 +16,7 @@ Most collaborative demos assume a perfect connection and let the server decide e
 ## What is inside
 
 - **Local-first React client** — applies edits before the network responds and persists an offline operation queue
-- **Deterministic CRDT core** — field-level last-writer-wins registers backed by hybrid logical clocks and actor-ID tie-breaking
+- **Deterministic CRDT core** — field-level last-writer-wins registers backed by hybrid logical clocks and operation-ID tie-breaking
 - **WebSocket sync service** — replays missed operations from a cursor and broadcasts accepted updates in real time
 - **Dual storage adapters** — runs instantly with an NDJSON journal or transactionally with PostgreSQL and indexed cursor replay
 - **Operational safeguards** — enforces token-bucket rate limits, bounded socket backpressure, payload caps, and strict validation
@@ -42,7 +47,7 @@ See [docs/architecture.md](docs/architecture.md) for invariants, failure behavio
 
 ## Run locally
 
-Requires Node.js 22 or newer.
+Requires a supported Node.js release (`22.22.2+`, `24.15.0+`, or `26+`).
 
 ```bash
 npm install
@@ -94,7 +99,7 @@ Suppose two offline collaborators start from the same card:
 
 1. A renames it while B moves it to **Done**. Because those edits update different field registers, the merged card keeps both changes.
 2. A and B both rename it. The greater hybrid timestamp wins.
-3. Their timestamps are identical. The actor ID is the final deterministic tie-break, so all replicas still choose the same title.
+3. Their timestamps are identical. The immutable operation ID is the final deterministic tie-break, so all replicas still choose the same title—even if a malformed client reuses an actor timestamp.
 
 This is deliberate last-writer-wins behavior, not intent-preserving rich-text merging. The distinction and possible extensions are documented in the architecture notes.
 
