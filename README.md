@@ -9,6 +9,10 @@ Converge is a local-first collaborative board that stays usable through slow net
 
 > Open the app in two tabs, take one offline, edit the same card in both, then reconnect. Both tabs converge while preserving unrelated field changes.
 
+![Converge running locally with a three-column board and example cards](docs/demo-board.jpg)
+
+*A real local run with example cards. The screenshot shows the interface; the [integration and property tests](#verify-it) exercise synchronization and convergence.*
+
 ## Why I built it
 
 Most collaborative demos assume a perfect connection and let the server decide every conflict. I wanted to explore the harder boundary: preserving a responsive product experience while guaranteeing deterministic results after replicas diverge. The result combines distributed-systems reasoning with an interface people can actually use.
