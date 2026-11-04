@@ -127,10 +127,11 @@ export function createConvergeServer(store: OperationStore, options: ConvergeSer
           }
           subscribe(socket, message.boardId);
           subscriptions.add(message.boardId);
-          const [operations, cursor] = await Promise.all([
-            store.since(message.boardId, message.cursor),
-            store.latestCursor(message.boardId),
-          ]);
+          const operations = await store.since(message.boardId, message.cursor);
+          // A concurrent append may commit after this replay snapshot. Never advance
+          // the client past an operation that was not included in the response.
+          const cursor = operations.at(-1)?.cursor
+            ?? Math.min(message.cursor, await store.latestCursor(message.boardId));
           metrics.replayedOperations += operations.length;
           send(socket, { type: "sync", boardId: message.boardId, cursor, operations });
           return;

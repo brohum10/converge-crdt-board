@@ -38,6 +38,9 @@ export class PostgresOperationJournal implements OperationStore {
 
     try {
       await client.query("BEGIN");
+      // PostgreSQL sequences allocate before commit. Serialize writers for one
+      // board so a higher cursor cannot become visible before a lower one.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [boardId]);
       for (const operation of operations) {
         const result = await client.query<OperationRow>(
           `INSERT INTO board_operations (board_id, operation_id, operation)

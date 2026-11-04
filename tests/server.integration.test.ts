@@ -26,6 +26,57 @@ afterEach(async () => {
 });
 
 describe("WebSocket sync service", () => {
+  it("clamps a stale client cursor after a journal reset", async () => {
+    const journal = new OperationJournal();
+    app = createConvergeServer(journal);
+    const port = await app.listen();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    await opened(socket);
+    const response = nextMessage(socket);
+    socket.send(JSON.stringify({ type: "join", boardId: "reset-board", cursor: 99 }));
+    expect(await response).toMatchObject({ type: "sync", cursor: 0, operations: [] });
+    socket.close();
+  });
+
+  it("does not skip an operation committed during replay", async () => {
+    const first: BoardOperation = {
+      id: "alice:1", actor: "alice", sequence: 1,
+      timestamp: { wallTime: 1, logical: 0, actor: "alice" },
+      cardId: "card-1", patch: { title: "First" },
+    };
+    const second: BoardOperation = {
+      ...first, id: "alice:2", sequence: 2,
+      timestamp: { wallTime: 2, logical: 0, actor: "alice" },
+      patch: { title: "Second" },
+    };
+    class RacingJournal extends OperationJournal {
+      private raced = false;
+
+      override async since(boardId: string, cursor: number) {
+        const snapshot = await super.since(boardId, cursor);
+        if (!this.raced) {
+          this.raced = true;
+          await this.append(boardId, [second]);
+        }
+        return snapshot;
+      }
+    }
+    const journal = new RacingJournal();
+    await journal.append("race-board", [first]);
+    app = createConvergeServer(journal);
+    const port = await app.listen();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    await opened(socket);
+    const initial = nextMessage(socket);
+    socket.send(JSON.stringify({ type: "join", boardId: "race-board", cursor: 0 }));
+    const replay = await initial;
+    expect(replay).toMatchObject({ type: "sync", cursor: 1, operations: [{ cursor: 1 }] });
+    const catchup = nextMessage(socket);
+    socket.send(JSON.stringify({ type: "join", boardId: "race-board", cursor: replay.type === "sync" ? replay.cursor : 0 }));
+    expect(await catchup).toMatchObject({ type: "sync", cursor: 2, operations: [{ cursor: 2 }] });
+    socket.close();
+  });
+
   it("broadcasts accepted operations and replays them from a cursor", async () => {
     const journal = new OperationJournal();
     app = createConvergeServer(journal);

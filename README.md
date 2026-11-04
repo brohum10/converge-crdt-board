@@ -91,7 +91,7 @@ npm run build
 npm run benchmark
 ```
 
-The benchmark applies 100,000 operations across 2,000 cards and 20 simulated actors. Five local runs produced **2.229 million operations/second median**; exact results depend on the machine. The checked-in code reports the full input size and measured throughput so the result is reproducible rather than a hand-picked claim. See [docs/benchmark.md](docs/benchmark.md) for the workload, environment, and all five samples.
+The 35-test suite includes a forced append-during-replay race, stale-cursor recovery, failed file-write recovery, concurrent duplicate submission, and generated convergence histories. The [architecture notes](docs/architecture.md) explain why the replay cursor advances only to operations actually returned, and how PostgreSQL serializes writers for one board. The [microbenchmark](docs/benchmark.md) times in-memory CRDT operations on 100,000 generated changes; it does **not** measure WebSocket throughput or multi-user latency.
 
 ## Conflict example
 

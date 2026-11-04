@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, readFile, rm, rmdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { OperationJournal } from "../src/server/journal";
 import type { BoardOperation } from "../src/core/types";
@@ -37,5 +40,32 @@ describe("operation journal", () => {
     await journal.append("beta", [op]);
     expect(await journal.since("alpha", 0)).toHaveLength(1);
     expect(await journal.since("beta", 0)).toHaveLength(1);
+  });
+
+  it("does not expose a failed file append and can retry afterward", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "converge-journal-"));
+    const path = join(directory, "operations.ndjson");
+    const journal = new OperationJournal(path);
+    try {
+      await mkdir(path);
+      await expect(journal.append("board", [op])).rejects.toThrow();
+      expect(await journal.since("board", 0)).toEqual([]);
+      expect(await journal.latestCursor("board")).toBe(0);
+      await rmdir(path);
+      expect(await journal.append("board", [op])).toHaveLength(1);
+      expect((await readFile(path, "utf8")).trim().split("\n")).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("serializes concurrent duplicate appends before assigning cursors", async () => {
+    const journal = new OperationJournal();
+    const [first, retry] = await Promise.all([
+      journal.append("board", [op]), journal.append("board", [op]),
+    ]);
+    expect(first).toHaveLength(1);
+    expect(retry).toEqual([]);
+    expect(await journal.since("board", 0)).toEqual(first);
   });
 });

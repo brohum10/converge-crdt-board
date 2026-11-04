@@ -32,7 +32,9 @@ The client keeps three pieces of sync metadata:
 
 On reconnect, it asks for entries after its cursor and resends its pending operations. Resending is safe because both the journal and replica deduplicate by operation ID. The server gives each newly accepted operation a global cursor, stores it through the selected journal adapter, and broadcasts it to every socket subscribed to that board.
 
-The PostgreSQL adapter wraps each batch in a transaction, uses a unique constraint on `(board_id, operation_id)` for cross-process idempotency, and indexes `(board_id, cursor)` for reconnect replay. The NDJSON adapter preserves the exact same interface for a zero-dependency local path.
+The PostgreSQL adapter wraps each batch in a transaction, uses a unique constraint on `(board_id, operation_id)` for cross-process idempotency, and indexes `(board_id, cursor)` for reconnect replay. A transaction-scoped advisory lock serializes writers for the same board: PostgreSQL sequences allocate before commit, so without the lock a later cursor could be visible while an earlier transaction is still open. The lock trades per-board write concurrency for replay safety. The NDJSON adapter preserves the exact same interface for a zero-dependency local path.
+
+The join response advances the client only to the last operation actually returned by its replay query. If another operation commits after that query, the client can request it on reconnect; it cannot silently skip it by persisting a newer cursor from a separate query. A regression test forces an append between the replay snapshot and the response.
 
 The server cursor is a transport optimization, not part of conflict resolution. CRDT timestamps still decide values, which prevents arrival order from silently changing the result.
 
@@ -61,8 +63,9 @@ For long-lived production boards, the server would periodically compact acknowle
 | Client floods operations | Per-socket token buckets reject excess work |
 | Client cannot drain messages | Backpressure limit closes the socket with a retryable status |
 | PostgreSQL write fails | The batch transaction rolls back and no partial acknowledgement is sent |
+| NDJSON append fails | No new operation is exposed in memory; a later retry can proceed |
 
-The file journal is durable enough for local development but does not promise crash-atomic multi-record writes. The PostgreSQL adapter is the production-shaped path when transactional batch durability matters.
+The file journal publishes a batch to readers only after its append completes. It still does not promise crash-atomic multi-record writes: a process crash can leave a partial final line. The PostgreSQL adapter is the production-shaped path when transactional batch durability matters.
 
 ## Observability
 
@@ -73,7 +76,7 @@ The file journal is durable enough for local development but does not promise cr
 The suite covers three different failure surfaces:
 
 1. focused tests for clocks, registers, validation, journals, rate limiting, and metrics;
-2. a multi-client WebSocket integration test that verifies broadcast, cursor replay, and emitted telemetry;
+2. multi-client WebSocket integration tests that verify broadcast, cursor replay, a forced concurrent replay race, and emitted telemetry;
 3. 200 generated concurrent histories applied forward, backward, and rotated to check the convergence invariant across thousands of operation schedules.
 
 ## Production evolution
